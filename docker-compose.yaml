@@ -1,0 +1,9 @@
+version: "2"
+services:
+  fuel_pricing:
+    build: .
+    image: sandersont/fuel_pricing
+    container_name: fuel_pricing
+    volumes:
+      - .:/opt/working
+    entrypoint: sleep 50000
