@@ -7,10 +7,12 @@ import sqlite3
 import uuid
 
 from datetime import datetime, timezone
+from geopy import distance, geocoders
+from pick import pick
 
 from settings import BusinessRules
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 class FuelAPI:
@@ -50,6 +52,40 @@ class FuelAPI:
         with open("prices.json", "w") as f:
             json.dump(resp, f)
 
+    def stationlocator(self, location):
+        geolocator = geocoders.Nominatim(user_agent="Python_NSW_Fuel_Prices")
+        location = geolocator.geocode(location, exactly_one=False)
+        if len(location) > 1:
+            _, idx = pick([a.address for a in location], "Please confirm the correct location")
+            log.info(location[idx].address)
+            coords = (location[idx].latitude, location[idx].longitude)
+
+        else:
+            print(location[0].address)
+            coords = (location[0].latitude, location[0].longitude)
+
+        with open("prices.json") as f:
+            data = json.load(f)
+            for s in data["stations"]:
+                location = (s["location"]["latitude"], s["location"]["longitude"])
+                dist = round(distance.distance(coords, location).km, 2)
+                s["distance"] = dist
+                # for e in ["brandid", "stationid", "location"]:
+                #     s.pop(e)
+            nearby = sorted(data["stations"], key=lambda a: a["distance"])[:5]
+            nearby_codes = {n["code"]: n for n in nearby}
+            print(nearby_codes)
+
+            for p in data["prices"]:
+                if p["stationcode"] in nearby_codes.keys():
+                    if not nearby_codes[p["stationcode"]].get("fuels"):
+                        nearby_codes[p["stationcode"]]["fuels"] = []
+                    nearby_codes[p["stationcode"]]["fuels"].append(
+                        {"Fuel": p["fueltype"], "Price": p["price"]}
+                    )
+            print(json.dumps(nearby_codes, indent=2, sort_keys=True))
+            return nearby_codes
+
 
 if __name__ == "__main__":
     f = FuelAPI(BusinessRules.API_KEY, BusinessRules.API_SECRET)
@@ -63,3 +99,5 @@ if __name__ == "__main__":
         log.info("Price data wasn't updated")
     else:
         f.allresults()
+    f.stationlocator(location="16-22 Devonshire St, Chatswood, Sydney")
+
